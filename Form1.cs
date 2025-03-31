@@ -68,14 +68,10 @@ namespace WinFormsApp1321
         }
         private async void button5_Click(object sender, EventArgs e)
         {
-
             SelectionForm selectionForm = new SelectionForm();
             selectionForm.ShowDialog();
             if (selectionForm.DialogResult == DialogResult.OK)
             {
-                /*string selectedStandardFile = selectionForm.StandardFilePath;
-                totalCycles = selectionForm.CalibrationCount;
-                currentCycle = 0;*/
                 bool writeSuccess = await _plcClient.WriteDRegisterAsync(2130, 2);
                 if (writeSuccess)
                 {
@@ -88,11 +84,8 @@ namespace WinFormsApp1321
                     //检测按钮
                     button7.Enabled = false;
                     button8.Enabled = false;
-
-
                     label1.Text = "当前状态：自校准模式";
                     label6.Text = "自校准模式运行中";
-
                     DialogResult result = MessageBox.Show(
               //$"系统文件：C:\\system\\system.ini\n" +
               $"标样文件：{selectionForm.StandardFilePath}\n" +
@@ -101,7 +94,6 @@ namespace WinFormsApp1321
               "放入样棒",
               MessageBoxButtons.OKCancel,
               MessageBoxIcon.Question
-
           );
                     if (result == DialogResult.Cancel)
                     {
@@ -114,53 +106,22 @@ namespace WinFormsApp1321
                             //检测按钮
                             button7.Enabled = false;
                             button8.Enabled = false;
-
                             label1.Text = "当前状态：待机状态";
                             label6.Text = "自校准模式";
                         }
                         // MessageBox.Show("自校准模式未开启。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
                         return;
                     }
                     else
                     {
-                        bool sampleInserted = false;
-                        while (!sampleInserted)
-                        {
-                            int[] response = await _plcClient.ReadDRegisterAsync(2132, 1);
-                            if (response == null)
-                            {
-                                // MessageBox.Show("无法读取 D2132，检查 PLC 连接。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                UpdateLabel8("报警信息：无法读取D2132，检查连接");
-                                return;
-                            }
-                            else if (response[0] == 1) // 扫码区有样棒
-                            {
-                                // 无限等待直到 ScanAASuccessCount 和 ScanBBSuccessCount 都不为 0
-                                while (TCPServer.ScanAASuccessCount == 0 || TCPServer.ScanBBSuccessCount == 0)
-                                {
-                                    await Task.Delay(100); // 每 100ms 检查一次，避免 CPU 过载
-                                }
-                                confirmWriteSuccess = await _plcClient.WriteDRegisterAsync(2132, 3);
-                                if (!confirmWriteSuccess)
-                                {
-                                    // MessageBox.Show("无法通知 PLC 开始循环（D2132 = 3 失败）", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                    UpdateLabel8("报警信息：无法通知PLC开启循环");
 
-                                    return;
-                                }
-                                else
-                                {
-                                    string selectedStandardFile = selectionForm.StandardFilePath;
-                                    totalCycles = selectionForm.CalibrationCount;
-                                    currentCycle = 0;
-                                    cancellationTokenSource = new CancellationTokenSource();
-                                    Task.Run(() => RunCalibrationLoop(selectedStandardFile, cancellationTokenSource.Token));
+                        // **执行校准循环**
+                        string selectedStandardFile = selectionForm.StandardFilePath;
+                        totalCycles = selectionForm.CalibrationCount;
+                        currentCycle = 0;
+                        cancellationTokenSource = new CancellationTokenSource();
+                        Task.Run(() => RunCalibrationLoop(selectedStandardFile, cancellationTokenSource.Token));
 
-                                    sampleInserted =true;
-                                }
-                            }
-                        }
                     }
                 }
                 else
@@ -169,16 +130,18 @@ namespace WinFormsApp1321
                     UpdateLabel8("报警信息：启动自校准失败！");
                     return;
                 }
-             
                 return;
             }
         }
+
 
 
         private async void button6_Click_1(object sender, EventArgs e)
         {
 
             isManualStop = true;  // 设置人为停止标志
+           /* UpdateLabel8("");
+            StopCalibration(false);*/
         }
 
 
@@ -228,8 +191,6 @@ namespace WinFormsApp1321
              }*/
         }
 
-        private string lastSentBarcode = string.Empty; // 记录上次已发送的条码
-        private bool isProcessingTest = false;  // 标志位，确保每次只有一个试件在检测中
 
         private async void DetectionTimer_Tick(object sender, EventArgs e)
         {
@@ -407,20 +368,22 @@ namespace WinFormsApp1321
             while (true)
             {
                 int[] response = await _plcClient.ReadDRegisterAsync(2132, 1);
+
                 if (response == null)
                 {
                     UpdateLabel8("报警信息：无法读取D2132，检查连接");
                     return false;
                 }
-                else if (response[0] == 1) // 扫码区有样棒
-                {
 
-                    // 无限等待直到 ScanAASuccessCount 和 ScanBBSuccessCount 都不为 0
+                if (response[0] == 1) // 扫码区有样棒
+                {
+                    // 等待扫码成功
                     while (TCPServer.ScanAASuccessCount == 0 || TCPServer.ScanBBSuccessCount == 0)
                     {
-                        await Task.Delay(100); // 每 100ms 检查一次，避免 CPU 过载
+                        await Task.Delay(100);
                     }
 
+                    // 写入 D2132 = 3，通知 PLC 开始循环
                     bool confirmWriteSuccess = await _plcClient.WriteDRegisterAsync(2132, 3);
                     if (!confirmWriteSuccess)
                     {
@@ -429,9 +392,25 @@ namespace WinFormsApp1321
                     }
                     return true;
                 }
+
+                // **如果 D2132 != 1，则持续弹窗**
+                DialogResult retryResult = MessageBox.Show(
+                    "请放入样棒后点击确认！",
+                    "等待样棒",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Warning
+                );
+
+                if (retryResult == DialogResult.Cancel)
+                {
+                    UpdateLabel8("操作取消：未放入样棒");
+                    return false;
+                }
+
                 await Task.Delay(100); // 每 100ms 重新检查扫码区状态
             }
         }
+
 
         private async Task<bool> CheckTestResultWithoutTimeout()
         {

@@ -131,6 +131,7 @@ namespace WinFormsApp1321
 
                 var clientId = IdentifyClient(initialData);
                 _clientIdentifiers[clientSocket] = clientId;
+
                 // **第一条消息回复心跳**
                 var heartbeatResponse = clientId switch
                 {
@@ -138,6 +139,7 @@ namespace WinFormsApp1321
                     "BB" => GenerateDefaultResponseBB(),
                     _ => new byte[] { 0xFF, 0xFF } // 默认心跳
                 };
+
                 await SendMessageAsync(clientSocket, heartbeatResponse);
                 return clientSocket;
             }
@@ -387,14 +389,16 @@ namespace WinFormsApp1321
         {
             isAAReceived = false;
             isBBReceived = false;
+            _scanAASuccessCount = 0;
+            _scanBBSuccessCount = 0;
             aaData = Array.Empty<byte>();  // 赋值为空数组
             bbData = Array.Empty<byte>();  // 赋值为空数组
         }
 
 
-        public async Task<bool> ProcessFinalTestData( int checkInterval = 100)
+        public async Task<bool> ProcessFinalTestData(int checkInterval = 100)
         {
-            
+
             Console.WriteLine("开始等待测试数据...");
 
             // **等待数据就绪**
@@ -446,7 +450,7 @@ namespace WinFormsApp1321
         }
 
         //检测模式结果
-        public async Task<bool> ProcessFinalFormalData( int checkInterval = 100)
+        public async Task<bool> ProcessFinalFormalData(int checkInterval = 100)
         {
             Console.WriteLine("开始等待测试数据...");
 
