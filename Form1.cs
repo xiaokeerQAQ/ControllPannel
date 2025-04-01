@@ -50,7 +50,7 @@ namespace WinFormsApp1321
             _tcpServer = new TCPServer(_plcClient, _scanGangBasic);
         }
 
-        private void UpdateLabel8(string text)
+        public void UpdateLabel8(string text)
         {
             if (label8.InvokeRequired)
             {
@@ -401,7 +401,8 @@ namespace WinFormsApp1321
             }
         }
 
-
+/*        byte[] aa = TCPServer.aaData;
+        byte[] bb = TCPServer.bbData;*/
         private async Task<bool> CheckTestResultWithoutTimeout()
         {
             Task<bool> task;
@@ -410,6 +411,9 @@ namespace WinFormsApp1321
             if (TCPServer.Mode)
             {
                 task = Task.Run(() => _tcpServer.ProcessFinalTestData());
+/*
+                UpdateLabel7($"{aa}");
+                UpdateLabel8($"{bb}");*/
             }
             else
             {
@@ -676,7 +680,7 @@ namespace WinFormsApp1321
                   label7.Text = text;
               }
           }*/
-        private void UpdateLabel7(string text)
+        public void UpdateLabel7(string text)
         {
             if (label7.InvokeRequired)
             {

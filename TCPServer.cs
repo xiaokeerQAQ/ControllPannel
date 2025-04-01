@@ -19,6 +19,7 @@ namespace WinFormsApp1321
         private volatile bool _isRunning;
         private readonly ScanGangBasic _scanGangBasic;
         private readonly PLCClient _plcClient;
+        private readonly Form1 _form1;
         private Dictionary<string, Func<byte[], byte[]>> _responseHandlers;
         private readonly Dictionary<string, Func<byte[], byte[]>> _responseHandlersTest;
         private readonly Dictionary<string, Func<byte[], byte[]>> _responseHandlersFormal;
@@ -32,6 +33,8 @@ namespace WinFormsApp1321
         // 这里使用静态变量来存储模式
         public static bool Mode { get; set; }    //1代表测试模式，0代表正式模式
         public static bool _canSendMessage { get; set; }
+        public static byte[] aaData;
+        public static byte[] bbData;
         private volatile bool _testCompleted = false;
         private volatile bool _formalCompleted = false;
         // 共享计数器（静态变量）
@@ -45,8 +48,8 @@ namespace WinFormsApp1321
 
         private bool isAAReceived = false;
         private bool isBBReceived = false;
-        private byte[] aaData;
-        private byte[] bbData;
+        
+        
         public event Action<string> OnClientConnected;
         public event Action<string, string> OnMessageReceived;
         public event Action<string> OnClientDisconnected;
@@ -412,10 +415,12 @@ namespace WinFormsApp1321
             {
                 Console.WriteLine("检测到数据的第一位为 0xA0, 返回 false.");
                 ResetTestStatus();
+
                 return false; // 返回 false
             }
 
             Console.WriteLine("开始处理最终数据...");
+
 
             // **提取缺陷数量**
             int defectCountAA = BitConverter.ToInt32(aaData, 1);  // 读取 aaData 中缺陷数量 (4字节)
@@ -550,7 +555,7 @@ namespace WinFormsApp1321
             response.AddRange(lengthBytes);
             response.AddRange(SelectionForm.CodeBytes);
             response.AddRange(SelectionForm.ToleranceBytes);
-            response.AddRange(SelectionForm.CodeBytes);
+            response.AddRange(SelectionForm.CountBytes);
             response.AddRange(SelectionForm.DefectPositionsBytes);
             DateTime now = DateTime.Now;
             long timestamp = now.Ticks;  // 获取 100 纳秒级时间戳（long类型 8字节）
@@ -589,7 +594,7 @@ namespace WinFormsApp1321
             response.AddRange(lengthBytes);
             response.AddRange(SelectionForm.CodeBytes);
             response.AddRange(SelectionForm.ToleranceBytes);
-            response.AddRange(SelectionForm.CodeBytes);
+            response.AddRange(SelectionForm.CountBytes);
             response.AddRange(SelectionForm.DefectPositionsBytes);
             DateTime now = DateTime.Now;
             long timestamp = now.Ticks;  // 获取 100 纳秒级时间戳（long类型 8字节）
