@@ -14,7 +14,7 @@ namespace WinFormsApp1321
     {
         public string StandardFilePath { get; private set; } = "";//文件路径
         public int CalibrationCount { get; private set; } = 0;//次数
-        public string SystemFilePath { get; private set; } = @"C:\system\system.ini";
+        public string SystemFilePath { get; private set; } = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "system.ini");
         private string barcode = ""; // 记录条码信息
         private readonly ReadTool _readTool;
 

@@ -269,21 +269,6 @@ namespace WinFormsApp1321
             }
         }
 
-
-
-        private async Task StopDetectionAsync()
-        {
-
-
-            // 启用自校准按钮
-            button5.Enabled = true;
-            button6.Enabled = true;
-            // 状态更新
-            isOn = false;
-            label9.Text = "检测模式";
-            label1.Text = "当前状态：待机状态";
-        }
-
         private void button3_Click(object sender, EventArgs e)
         {
 
@@ -347,18 +332,6 @@ namespace WinFormsApp1321
                 CompleteCalibration(lastCycleEndTime, iniPath);
                 //自校准次数已满通知PLC下料
                 await _plcClient.WriteDRegisterAsync(2142, 1);
-                //进入待机状态
-                int[] response = await _plcClient.ReadDRegisterAsync(2144, 2);
-                if (response == null)
-                {
-                    UpdateLabel8("报警信息：D2132无有效信息，检查连接");
-                    return;
-                }
-                else if (response[1] == 1)
-                {
-                    label1.Text = "当前状态：自校准模式";
-                    label6.Text = "自校准模式运行中";
-                }
                 return;
             }
         }
@@ -403,7 +376,24 @@ namespace WinFormsApp1321
 
                 if (retryResult == DialogResult.Cancel)
                 {
-                    UpdateLabel8("操作取消：未放入样棒");
+                    bool Success = await _plcClient.WriteDRegisterAsync(2142, 1);
+                    if (Success)
+                    {
+                        this.Invoke(new Action(() =>
+                        {
+                            isOn1 = false;
+                            button5.Enabled = true;
+                            button6.Enabled = false;
+                            //检测按钮
+                            button7.Enabled = false;
+                            button8.Enabled = false;
+                            label1.Text = "当前状态：待机状态";
+                            label6.Text = "自校准模式";
+                            UpdateLabel8("操作取消：未放入样棒");
+                        }));
+                        
+                    }
+                   
                     return false;
                 }
 
@@ -458,13 +448,26 @@ namespace WinFormsApp1321
             WriteDeadlineToIni(iniPath, validUntil);
             UpdateValidUntilLabel(validUntil);
 
-            this.Invoke(new Action(() => button7.Enabled = true));
+            //  this.Invoke(new Action(() => button7.Enabled = true));
 
-            StopCalibration(false);
+            Stop1();
         }
 
+        private void Stop1()
+        {
+            currentCycle = 0;
+            totalCycles = 0;
+            isOn1 = false;
+            this.Invoke(new Action(() => button5.Enabled = true));
+            this.Invoke(new Action(() => button6.Enabled = false));
+            this.Invoke(new Action(() => button7.Enabled = true));
+            this.Invoke(new Action(() => button8.Enabled = false));
+            this.Invoke(new Action(() => label6.Text = "自校准模式"));
+            this.Invoke(new Action(() => label1.Text = "当前状态：待机状态"));
+            this.Invoke(new Action(() => label2.Text = "当前循环次数：0"));
 
-      
+        }
+
         private void WriteDeadlineToIni(string iniPath, DateTime deadline)
         {
             try
@@ -552,7 +555,14 @@ namespace WinFormsApp1321
             textBox2.ForeColor = Color.Gray;  // 设置提示文本颜色
             InitializeTextBoxEvents();
 
-            string iniPath = "C:\\system\\system.ini";
+            // 获取当前可执行文件的目录
+            string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+            // 拼接文件路径
+            string iniPath = Path.Combine(exeDirectory, "system.ini");
+
+            Console.WriteLine(iniPath);
+
             DateTime deadline = ReadDeadlineFromIni(iniPath);
             if (deadline != DateTime.MinValue)
             {
@@ -606,7 +616,11 @@ namespace WinFormsApp1321
         {
             while (true)
             {
-                string iniPath = "C:\\system\\system.ini";
+                // 获取当前可执行文件的目录
+                string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+                // 拼接文件路径
+                string iniPath = Path.Combine(exeDirectory, "system.ini");
                 DateTime deadline = ReadDeadlineFromIni(iniPath);
                 DateTime now = DateTime.Now;
 
@@ -704,13 +718,16 @@ namespace WinFormsApp1321
                 cancellationTokenSource = null;
             }
 
-            bool isCalibrationSuccessful = (currentCycle > 0 && currentCycle >= totalCycles);
+            bool isCalibrationSuccessful = (currentCycle > 0 && currentCycle == totalCycles);
 
             currentCycle = 0;
             totalCycles = 0;
             isOn1 = false;
             button5.Enabled = true;
             button6.Enabled = false;
+            label6.Text = "自校准模式";
+            label1.Text = "当前状态：待机状态";
+            label2.Text = "当前循环次数：0";
             string stopTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
             // 写入系统文件 Deadline 部分
@@ -731,7 +748,11 @@ namespace WinFormsApp1321
 
         private void WriteStopTimeToFile(string stopTime)
         {
-            string iniPath = "C:\\system\\system.ini"; // 系统文件路径
+            // 获取当前可执行文件的目录
+            string exeDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+            // 拼接文件路径
+            string iniPath = Path.Combine(exeDirectory, "system.ini");
 
             try
             {
