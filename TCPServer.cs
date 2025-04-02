@@ -352,7 +352,7 @@ namespace WinFormsApp1321
 
         private bool CheckFormalResult(byte[] data)
         {
-            // 1. 查找 E5 标志位
+            // 1. 查找 E6 标志位
             int indexE6 = Array.IndexOf(data, (byte)0xE6);
             if (indexE6 == -1) return false;
 
@@ -394,8 +394,8 @@ namespace WinFormsApp1321
             isBBReceived = false;
             _scanAASuccessCount = 0;
             _scanBBSuccessCount = 0;
-            aaData = Array.Empty<byte>();  // 赋值为空数组
-            bbData = Array.Empty<byte>();  // 赋值为空数组
+            aaData = null;  //  改为 null
+            bbData = null;  //  改为 null
         }
 
 
@@ -458,11 +458,27 @@ namespace WinFormsApp1321
         public async Task<bool> ProcessFinalFormalData(int checkInterval = 100)
         {
             Console.WriteLine("开始等待测试数据...");
-
+            string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt");
             // **等待数据就绪**
             while ((aaData == null || bbData == null))
             {
                 await Task.Delay(checkInterval);
+            }
+
+            // **将 aaData 和 bbData 写入 log.txt**
+            try
+            {
+                using (StreamWriter writer = new StreamWriter(logPath, true, Encoding.UTF8))
+                {
+                    writer.WriteLine($"时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+                    writer.WriteLine($"aaData: {BitConverter.ToString(aaData)}");
+                    writer.WriteLine($"bbData: {BitConverter.ToString(bbData)}");
+                    writer.WriteLine("----------------------------------");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"写入日志失败：{ex.Message}");
             }
 
             // **数据到达后，检查第一位是否是 0xA0**
@@ -502,38 +518,6 @@ namespace WinFormsApp1321
             // 创建一个新数组，包含校验位
             return response.Concat(new byte[] { checkSum }).ToArray();
         }
-
-        /*        //发送条码信息给客户端
-                public async Task SendBarcodeInfoToClients(byte[] barcodeLength, byte[] barcodeBytes)
-                {
-                    foreach (var client in _clients.Keys.ToArray())
-                    {
-                        if (!client.Connected) continue;
-
-                        var clientId = _clientIdentifiers.GetValueOrDefault(client, null);
-                        if (clientId == null) continue;
-
-                        // 调用 GenerateBarcodeResponse 来生成响应消息
-                        var responseMessage = GenerateBarcodeResponse(clientId, barcodeLength, barcodeBytes);
-
-                        // 发送消息到客户端
-                        await SendMessageAsync(client, responseMessage);
-                    }
-                }*/
-
-        /*        //生成条码响应
-                private byte[] GenerateBarcodeResponse(string clientId, byte[] length, byte[] data)
-                {
-                    var prefix = clientId == "AA"
-                        ? new byte[] { 0xFD, 0x55, 0xAA, 0x02, 0x00, 0xFB }
-                        : new byte[] { 0xFD, 0x55, 0xBB, 0x02, 0x00, 0xFB };
-
-                    List<byte> response = new List<byte>(prefix);
-                    response.AddRange(length);
-                    response.AddRange(data);
-                    response.Add(CalculateCheckSum(response.ToArray()));
-                    return response.ToArray();
-                }*/
 
         //AA回复心跳时，携带样棒信息
         private byte[] HandleHeartbeatAATest(byte[] input)

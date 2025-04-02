@@ -14,7 +14,7 @@ namespace WinFormsApp1321
         private CancellationTokenSource cancellationTokenSource; // 控制循环停止
         private bool isCalibrationMode = false;
 
-        private System.Windows.Forms.Timer detectionTimer;
+       // private System.Windows.Forms.Timer detectionTimer;
         private System.Windows.Forms.Timer heartbeatTimer;
         private TCPServer _tcpServer;
         private PLCClient _plcClient;
@@ -33,9 +33,9 @@ namespace WinFormsApp1321
             button4.Enabled = false;
             button6.Enabled = false;
             button8.Enabled = false;
-            detectionTimer = new System.Windows.Forms.Timer();
+/*            detectionTimer = new System.Windows.Forms.Timer();
             detectionTimer.Interval = 5000;
-            detectionTimer.Tick += DetectionTimer_Tick;
+            detectionTimer.Tick += DetectionTimer_Tick;*/
 
             heartbeatTimer = new System.Windows.Forms.Timer();
             heartbeatTimer.Interval = 4000; // 4秒
@@ -192,7 +192,7 @@ namespace WinFormsApp1321
         }
 
 
-        private async void DetectionTimer_Tick(object sender, EventArgs e)
+       /* private async void DetectionTimer_Tick(object sender, EventArgs e)
         {
             while (isOn)
             {
@@ -267,7 +267,7 @@ namespace WinFormsApp1321
                     await Task.Delay(1000);
                 }
             }
-        }
+        }*/
 
         private void button3_Click(object sender, EventArgs e)
         {
@@ -411,9 +411,7 @@ namespace WinFormsApp1321
             if (TCPServer.Mode)
             {
                 task = Task.Run(() => _tcpServer.ProcessFinalTestData());
-/*
-                UpdateLabel7($"{aa}");
-                UpdateLabel8($"{bb}");*/
+
             }
             else
             {
@@ -849,56 +847,145 @@ namespace WinFormsApp1321
 
         }
 
-        private void button4_Click(object sender, EventArgs e)
+        private async void button4_Click(object sender, EventArgs e)
         {
 
-            if (!isOn)
+           
+                string batchNumber = textBox2.Text.Trim();
+                BatchNumber = Encoding.UTF8.GetBytes(batchNumber);
+                //detectionTimer.Start();
+                if (string.IsNullOrWhiteSpace(batchNumber))
+                {
+                    MessageBox.Show("批次号不能为空，请输入有效的批次号！", "警告", MessageBoxButtons.OK);
+                    return;
+                }
+                SaveBatchNumberToFile(batchNumber);
+            TCPServer.Mode = false;
+            int c = 2; // 用来控制步骤
+            while (isOn)
             {
-                MessageBox.Show("请先进入检测模式！", "提示", MessageBoxButtons.OK);
-                return;
+                switch (c)
+                {
+                    case 2: // 等待样棒到位
+                        int[] response = await _plcClient.ReadDRegisterAsync(2132, 1);
+
+                        if (response != null && response.Length > 0 && response[0] == 1)
+                        {
+
+                            c = 3; // 进入扫码步骤
+                        }
+                        else
+                        {
+                            MessageBox.Show("没有样棒，请放入样棒后点击确认", "等待样棒", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            await Task.Delay(100);
+                        }
+                        break;
+
+                    case 3: // 扫码 试件检测
+                        string result = string.Empty;
+                        string errStr = string.Empty;
+                        if (isProcessing)
+                        {
+                            await Task.Delay(1000);
+                            break;
+                        }
+
+                        // **等待扫码枪成功扫描**
+                        while (true)
+                        {
+                            bool success = _scanGangBasic.ScanOnce(out result, out errStr);
+                            if (success)
+                            {
+                                success = false;
+                                break;
+                            }
+                            await Task.Delay(100); // 每 100ms 检查一次，避免 CPU 过载
+                        }
+
+                        // **更新条码数据**123
+                        Form1.BarcodeBytes = Encoding.UTF8.GetBytes(result);
+
+                        // **等待 ScanAASuccessCount 和 ScanBBSuccessCount**
+                        while (TCPServer.ScanAASuccessCount == 0 || TCPServer.ScanBBSuccessCount == 0)
+                        {
+                            await Task.Delay(100);
+                        }
+
+                        // **开始处理试件，设置标志位**
+                        isProcessing = true;
+
+                        // **发送条码通知 PLC**
+                        bool writeSuccess = await _plcClient.WriteDRegisterAsync(2132, 3);
+                        if (writeSuccess)
+                        {
+                            // **试件判断**
+                            bool isTestPassed = await CheckTestResultWithoutTimeout();
+                            int statusCode = isTestPassed ? 1 : 2;
+
+                            await _plcClient.WriteDRegisterAsync(2138, statusCode);
+                            Console.WriteLine($"试件检测结果：{(isTestPassed ? "合格" : "不合格")}，已发送至 D2138。");
+                        }
+                        else
+                        {
+                            Console.WriteLine("无法向 PLC 发送扫码成功信息！");
+                        }
+                        isProcessing = false;
+
+                        // **检测停止信号**
+                        int[] stopSignal = await _plcClient.ReadDRegisterAsync(2144, 2);
+                        if (stopSignal.Length > 1 && stopSignal[1] == 1)
+                        {
+                            Console.WriteLine("检测模式停止...");
+                            await StopDetectionAsync();
+                            return;
+                        }
+
+                        c = 2; // 继续检测下一根样棒
+                        await Task.Delay(1000);
+                        break;
+                }
             }
-
-
-            string batchNumber = textBox2.Text.Trim();
-            BatchNumber = Encoding.UTF8.GetBytes(batchNumber);
-            detectionTimer.Start();
-
-            if (string.IsNullOrWhiteSpace(batchNumber))
-            {
-                MessageBox.Show("批次号不能为空，请输入有效的批次号！", "警告", MessageBoxButtons.OK);
-                return;
-            }
-
-
-            SaveBatchNumberToFile(batchNumber);
         }
+
+        private async Task StopDetectionAsync()
+        {
+
+
+            // 启用自校准按钮
+            button5.Enabled = true;
+            button6.Enabled = true;
+            // 状态更新
+            isOn = false;
+            label9.Text = "检测模式";
+            label1.Text = "当前状态：待机状态";
+        }
+
         private void SaveBatchNumberToFile(string batchNumber)
         {
-            string directoryPath = @"C:\system\"; // 保存目录
-            string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-            string filePath = Path.Combine(directoryPath, $"{timestamp}_batch.txt");
+            // 获取程序运行目录
+            string directoryPath = AppDomain.CurrentDomain.BaseDirectory;
+            string filePath = Path.Combine(directoryPath, "batch_numbers.txt");
 
             try
             {
-
+                // 确保目录存在（通常 bin 目录已存在）
                 if (!Directory.Exists(directoryPath))
                 {
                     Directory.CreateDirectory(directoryPath);
                 }
 
-
+                // 追加批次号到同一个文件
                 string content = $"时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n批次号：{batchNumber}\n-------------------\n";
                 File.AppendAllText(filePath, content, Encoding.UTF8);
-
 
                 MessageBox.Show($"批次号已成功保存到文件：{filePath}", "保存成功", MessageBoxButtons.OK);
             }
             catch (Exception ex)
             {
-
                 MessageBox.Show($"保存批次号时发生错误：{ex.Message}", "错误", MessageBoxButtons.OK);
             }
         }
+
 
         private void textBox2_TextChanged(object sender, EventArgs e)
         {
@@ -946,10 +1033,6 @@ namespace WinFormsApp1321
                 button6.Enabled = false;
                 textBox2.Enabled = true;
                 button4.Enabled = true;
-
-
-               
-
                 UpdateLabel7(""); // 清空报警信息
             }
             else
@@ -966,7 +1049,7 @@ namespace WinFormsApp1321
             if (writeSuccess)
             {
                 isOn = false;
-                detectionTimer.Stop();
+                //detectionTimer.Stop();
                 button7.Enabled = true;
                 button8.Enabled = true;
 
